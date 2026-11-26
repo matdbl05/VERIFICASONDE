@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calibration Document Generator - Di Blasio Riccardo</title>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-workspace: #cbd5e1;
+      --toolbar-bg: #0f172a;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --paper-bg: #ffffff;
+      --ink: #0f172a;
+      --border-dark: #1e293b;
+      --border-light: #94a3b8;
+      --input-focus: #eff6ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg-workspace);
+      color: var(--ink);
+      padding-top: 68px;
+      padding-bottom: 48px;
+    }
+
+    /* Barra di lavoro superiore */
+    .toolbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 58px;
+      background: var(--toolbar-bg);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      gap: 12px;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toolbar-title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: 0.3px;
+      margin-right: 8px;
+    }
+
+    select.doc-selector {
+      background: #1e293b;
+      color: #fff;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.85rem;
+      min-width: 210px;
+      cursor: pointer;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background: #334155;
+      color: #f8fafc;
+    }
+
+    .btn-secondary:hover {
+      background: #475569;
+    }
+
+    .btn-danger {
+      background: #b91c1c;
+      color: #fff;
+    }
+
+    .btn-danger:hover {
+      background: #991b1b;
+    }
+
+    .btn-export {
+      background: #16a34a;
+      color: #fff;
+      padding: 8px 16px;
+      font-size: 0.88rem;
+    }
+
+    .btn-export:hover {
+      background: #15803d;
+    }
+
+    /* Contenitore Fogli A4 impilati (794px x 1123px = esattamente A4 a 96 DPI) */
+    .sheets-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      padding: 0 16px;
+    }
+
+    .a4-page {
+      width: 794px;
+      min-width: 794px;
+      max-width: 794px;
+      height: 1123px;
+      min-height: 1123px;
+      max-height: 1123px;
+      background: var(--paper-bg);
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.28);
+      padding: 46px 50px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Campi editabili integrati nel foglio */
+    input.sheet-input,
+    select.sheet-select,
+    textarea.sheet-textarea {
+      width: 100%;
+      border: 1px solid transparent;
+      background: transparent;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: inherit;
+      font-weight: inherit;
+      color: inherit;
+      padding: 3px 5px;
+      line-height: 1.3;
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input.sheet-input:hover,
+    select.sheet-select:hover,
+    textarea.sheet-textarea:hover {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+    }
+
+    input.sheet-input:focus,
+    select.sheet-select:focus,
+    textarea.sheet-textarea:focus {
+      border-color: var(--accent);
+      background: var(--input-focus);
+    }
+
+    /* Sostituzione testo statico in fase di export PDF */
+    .pdf-static-text {
+      display: block;
+      width: 100%;
+      padding: 3px 5px;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .pdf-static-inline {
+      display: inline-block;
+      padding: 1px 2px;
+      line-height: 1.35;
+    }
+
+    /* Intestazione Documento Uniformata (Colonne simmetriche per centratura perfetta) */
+    .doc-header {
+      display: grid;
+      grid-template-columns: 185px 1fr 185px;
+      align-items: start;
+      border-bottom: 2px solid var(--border-dark);
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+      gap: 10px;
+    }
+
+    .issuer-block {
+      font-size: 12.5px;
+      font-weight: 400;
+      line-height: 1.55;
+      color: #1e293b;
+    }
+
+    .issuer-block .issuer-line {
+      padding: 1px 2px;
+      min-height: 20px;
+    }
+
+    .issuer-block input.issuer-input {
+      padding: 1px 2px;
+      line-height: 1.45;
+      font-weight: 400;
+      font-size: 12.5px;
+      color: #1e293b;
+    }
+
+    .issuer-block .pdf-static-text {
+      padding: 1px 2px;
+      line-height: 1.55;
+      font-weight: 400;
+      font-size: 12.5px;
+      color: #1e293b;
+    }
+
+    .title-block {
+      text-align: center;
+      padding-top: 2px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .doc-main-title {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      margin: 0 0 10px 0;
+      text-align: center;
+    }
+
+    .tag-box {
+      display: inline-block;
+      border: 1.5px solid var(--border-dark);
+      padding: 5px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      background: #f8fafc;
+      white-space: nowrap;
+    }
+
+    .tag-box span.tag-lbl {
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    .tag-box input,
+    .tag-box .pdf-static-inline {
+      display: inline-block;
+      vertical-align: middle;
+      width: 110px;
+      font-weight: 800;
+      font-size: 13.5px;
+      text-align: left;
+    }
+
+    .brand-block {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: flex-start;
+      padding-top: 2px;
+    }
+
+    .scandura-badge {
+      border: 1.5px solid #1e293b;
+      padding: 6px 12px;
+      text-align: center;
+      min-width: 140px;
+    }
+
+    .scandura-logo {
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      color: #0f172a;
+    }
+
+    .scandura-sub {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      color: #334155;
+      margin-top: 2px;
+    }
+
+    /* Sezioni e Tabelle Tecniche */
+    .section-band {
+      background: #e2e8f0;
+      border: 1px solid var(--border-dark);
+      font-size: 12.5px;
+      font-weight: 800;
+      padding: 5px 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    table.meta-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    table.meta-table td {
+      border: 1px solid var(--border-light);
+      padding: 4px 6px;
+      vertical-align: middle;
+    }
+
+    td.lbl {
+      background: #f8fafc;
+      font-weight: 700;
+      width: 19%;
+      color: #1e293b;
+    }
+
+    td.val {
+      width: 31%;
+    }
+
+    table.setup-table,
+    table.test-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+      margin-bottom: 8px;
+    }
+
+    table.setup-table th,
+    table.setup-table td,
+    table.test-table th,
+    table.test-table td {
+      border: 1px solid var(--border-dark);
+      padding: 5px 5px;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    table.setup-table th,
+    table.test-table th {
+      background: #f1f5f9;
+      font-weight: 700;
+      font-size: 11px;
+    }
+
+    table.setup-table td.row-hdr {
+      background: #f8fafc;
+      font-weight: 700;
+      text-align: left;
+      width: 14%;
+      padding-left: 8px;
+    }
+
+    .range-inline {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+    }
+
+    .range-inline input,
+    .range-inline .pdf-static-inline {
+      width: 64px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    .row-actions-col {
+      width: 30px;
+    }
+
+    .btn-mini {
+      background: #e2e8f0;
+      border: 1px solid #94a3b8;
+      border-radius: 3px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      cursor: pointer;
+    }
+
+    .btn-mini:hover {
+      background: #cbd5e1;
+    }
+
+    .btn-mini.del {
+      color: #b91c1c;
+    }
+
+    /* Footer pagina A4 */
+    .doc-footer {
+      border-top: 1px solid var(--border-dark);
+      padding-top: 6px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+      color: #334155;
+    }
+
+    /* Grafico Pagina 2 */
+    .chart-box {
+      border: 1px solid var(--border-dark);
+      padding: 12px 14px;
+      margin-top: 10px;
+      background: #fff;
+    }
+
+    .chart-title {
+      text-align: center;
+      font-size: 14.5px;
+      font-weight: 700;
+      font-style: italic;
+      margin-bottom: 6px;
+    }
+
+    .chart-svg-wrap {
+      width: 100%;
+      height: 245px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .chart-legend {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11.5px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed #cbd5e1;
+    }
+
+    .legend-items {
+      display: flex;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 700;
+    }
+
+    .tolerance-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 700;
+    }
+
+    .tolerance-control input,
+    .tolerance-control .pdf-static-inline {
+      width: 58px;
+      border: 1px solid #94a3b8;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    /* Box Remarks & Approvazione Pagina 2 */
+    .remarks-box {
+      border: 1px solid var(--border-dark);
+      padding: 10px 12px;
+      margin-top: 12px;
+    }
+
+    .remarks-label {
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    textarea.remarks-area {
+      width: 100%;
+      min-height: 56px;
+      resize: none;
+      font-size: 12.5px;
+      font-weight: 700;
+    }
+
+    .summary-strip {
+      border: 1px solid var(--border-dark);
+      background: #f8fafc;
+      padding: 10px 14px;
+      margin-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12.5px;
+      font-weight: 700;
+      gap: 10px;
+    }
+
+    .summary-errors-group {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 2px;
+    }
+
+    .inline-num-edit {
+      width: 52px !important;
+      text-align: center;
+      font-weight: 700 !important;
+      border-bottom: 1px dashed #94a3b8 !important;
+      padding: 1px 2px !important;
+    }
+
+    .status-pass {
+      color: #15803d;
+      font-weight: 800;
+    }
+
+    .status-fail {
+      color: #b91c1c;
+      font-weight: 800;
+    }
+
+    .signoff-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 12px;
+    }
+
+    .signoff-table td {
+      border: 1px solid var(--border-dark);
+      padding: 7px 8px;
+      vertical-align: middle;
+    }
+
+    .signoff-table td.lbl {
+      width: 23%;
+      background: #f8fafc;
+      font-weight: 700;
+    }
+
+    .signoff-table td.val {
+      width: 27%;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+      .toolbar,
+      .no-export {
+        display: none !important;
+      }
+      .sheets-stack {
+        gap: 0;
+        padding: 0;
+      }
+      .a4-page {
+        box-shadow: none;
+        margin: 0;
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- BARRA DI LAVORO -->
+  <div class="toolbar">
+    <div class="toolbar-group">
+      <span class="toolbar-title">Schede Taratura</span>
+      <select id="docSelector" class="doc-selector" onchange="switchDocument(this.value)"></select>
+      <button class="btn btn-primary" onclick="createNewDocument()">+ Nuova Scheda</button>
+      <button class="btn btn-secondary" onclick="duplicateDocument()">Duplica</button>
+      <button class="btn btn-danger" onclick="deleteCurrentDocument()">Elimina</button>
+    </div>
+
+    <div class="toolbar-group">
+      <button class="btn btn-secondary" onclick="saveAllToStorage()">Salva Dati</button>
+      <button class="btn btn-export" id="btnExportPdf" onclick="exportTwoPagePDF()">Esporta PDF (2 Pagine A4)</button>
+    </div>
+  </div>
+
+  <!-- CONTENITORE DUE FOGLI A4 IMPILATI -->
+  <div class="sheets-stack">
+
+    <!-- ==================== PAGINA 1 / 2 ==================== -->
+    <div class="a4-page" id="page1">
+      <div>
+        <!-- Intestazione -->
+        <div class="doc-header">
+          <div class="issuer-block">
+            <input class="sheet-input issuer-input" data-field="issuerName" />
+            <input class="sheet-input issuer-input" data-field="issuerAddress" />
+            <input class="sheet-input issuer-input" data-field="issuerCity" />
+            <input class="sheet-input issuer-input" data-field="issuerVat" />
+          </div>
+
+          <div class="title-block">
+            <div class="doc-main-title">CALIBRATION DOCUMENT</div>
+            <div class="tag-box">
+              <span class="tag-lbl">Instr. Tag. No.:</span>
+              <input class="sheet-input" data-field="tagNo" oninput="syncTagInputs(this.value)" />
+            </div>
+          </div>
+
+          <div class="brand-block">
+            <div class="scandura-badge">
+              <div class="scandura-logo">SCANDURA</div>
+              <div class="scandura-sub">MILANO - ITALY</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Anagrafica Cliente & Strumento -->
+        <table class="meta-table">
+          <tr>
+            <td class="lbl">Customer</td>
+            <td class="val"><input class="sheet-input" data-field="customer" /></td>
+            <td class="lbl">Manufacturer</td>
+            <td class="val"><input class="sheet-input" data-field="manufacturer" /></td>
+          </tr>
+          <tr>
+            <td class="lbl">Instrument name</td>
+            <td class="val"><input class="sheet-input" data-field="instrumentName" /></td>
+            <td class="lbl">Type</td>
+            <td class="val"><input class="sheet-input" data-field="type" /></td>
+          </tr>
+          <tr>
+            <td class="lbl">Model</td>
+            <td class="val"><input class="sheet-input" data-field="model" /></td>
+            <td class="lbl">Serial number</td>
+            <td class="val"><input class="sheet-input" data-field="serialNumber" /></td>
+          </tr>
+          <tr>
+            <td class="lbl">Accredia Certif.</td>
+            <td class="val"><input class="sheet-input" data-field="accrediaCert" /></td>
+            <td class="lbl">Expiration date</td>
+            <td class="val"><input class="sheet-input" data-field="expirationDate" /></td>
+          </tr>
+        </table>
+
+        <!-- Banda Report -->
+        <div class="section-band">
+          <span>CALIBRATION REPORT</span>
+          <span style="width: 270px;"><input class="sheet-input" style="text-align:right; font-weight:800;" data-field="calibratorName" /></span>
+        </div>
+
+        <!-- Setup Calibratore -->
+        <div style="font-size: 11.5px; font-weight: 800; margin: 8px 0 4px;">Calibrator Setup</div>
+        <table class="setup-table">
+          <thead>
+            <tr>
+              <th style="width:14%;">Parameter</th>
+              <th style="width:32%;">Reference Reading</th>
+              <th style="width:32%;">Reading From Device</th>
+              <th style="width:22%;">Auxiliary input/output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="row-hdr">Source</td>
+              <td><textarea class="sheet-textarea" rows="2" style="text-align:center;" data-field="refSource"></textarea></td>
+              <td><textarea class="sheet-textarea" rows="2" style="text-align:center;" data-field="rdgSource"></textarea></td>
+              <td><textarea class="sheet-textarea" rows="2" style="text-align:center;" data-field="auxSource"></textarea></td>
+            </tr>
+            <tr>
+              <td class="row-hdr">Unit</td>
+              <td><input class="sheet-input" style="text-align:center;" data-field="refUnit" /></td>
+              <td><input class="sheet-input" style="text-align:center;" data-field="rdgUnit" /></td>
+              <td><input class="sheet-input" style="text-align:center;" data-field="auxUnit" /></td>
+            </tr>
+            <tr>
+              <td class="row-hdr">Range</td>
+              <td>
+                <div class="range-inline">
+                  <input type="text" class="sheet-input" data-field="refRangeMin" oninput="recalculateAll()" />
+                  <span>/</span>
+                  <input type="text" class="sheet-input" data-field="refRangeMax" oninput="recalculateAll()" />
+                </div>
+              </td>
+              <td>
+                <div class="range-inline">
+                  <input type="text" class="sheet-input" data-field="rdgRangeMin" oninput="recalculateAll()" />
+                  <span>/</span>
+                  <input type="text" class="sheet-input" data-field="rdgRangeMax" oninput="recalculateAll()" />
+                </div>
+              </td>
+              <td><input class="sheet-input" style="text-align:center;" data-field="auxRange" /></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Tabella Punti di Prova -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin: 10px 0 5px;">
+          <span style="font-size: 11.5px; font-weight: 800;">Test Data</span>
+          <button class="btn-mini no-export" onclick="addTestPoint()">+ Aggiungi Punto</button>
+        </div>
+
+        <table class="test-table">
+          <thead>
+            <tr>
+              <th style="width:8%;">Cal.<br>point</th>
+              <th style="width:12%;">REF<br><span id="lblRefUnit">degrees C</span></th>
+              <th style="width:13%;">REF<br>% range</th>
+              <th style="width:12%;">RDG<br><span id="lblRdgUnit">degrees C</span></th>
+              <th style="width:13%;">RDG<br>% range</th>
+              <th style="width:13%;">ERR<br>% range</th>
+              <th style="width:9%;">AUX</th>
+              <th style="width:16%;">As Found /<br>As Left</th>
+              <th class="row-actions-col no-export"></th>
+            </tr>
+          </thead>
+          <tbody id="testPointsBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Footer Pagina 1 -->
+      <div class="doc-footer">
+        <span>Page: 1/2</span>
+        <span>Document continues ......</span>
+      </div>
+    </div>
+
+    <!-- ==================== PAGINA 2 / 2 ==================== -->
+    <div class="a4-page" id="page2">
+      <div>
+        <!-- Intestazione ripetuta (identica per struttura, spaziatura e peso) -->
+        <div class="doc-header">
+          <div class="issuer-block">
+            <div class="issuer-line" id="p2IssuerName">Di Blasio Riccardo</div>
+            <div class="issuer-line" id="p2IssuerAddress">Via I Maggio 160</div>
+            <div class="issuer-line" id="p2IssuerCity">36060 Schiavon (VI)</div>
+            <div class="issuer-line" id="p2IssuerVat">P.Iva 04781740966</div>
+          </div>
+
+          <div class="title-block">
+            <div class="doc-main-title">CALIBRATION DOCUMENT</div>
+            <div class="tag-box">
+              <span class="tag-lbl">Instr. Tag. No.:</span>
+              <input class="sheet-input" id="p2TagMirror" oninput="syncTagInputs(this.value)" />
+            </div>
+          </div>
+
+          <div class="brand-block">
+            <div class="scandura-badge">
+              <div class="scandura-logo">SCANDURA</div>
+              <div class="scandura-sub">MILANO - ITALY</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Grafico Errore Strumento -->
+        <div class="chart-box">
+          <div class="chart-title">Instrument output error</div>
+          <div class="chart-svg-wrap" id="errorChartContainer"></div>
+
+          <div class="chart-legend">
+            <div class="legend-items">
+              <span class="legend-item">
+                <svg width="16" height="12"><polygon points="2,2 14,6 2,10" fill="none" stroke="#0f172a" stroke-width="1.5"/></svg>
+                As Found
+              </span>
+              <span class="legend-item">
+                <svg width="16" height="12"><circle cx="8" cy="6" r="4" fill="#2563eb"/></svg>
+                As Left
+              </span>
+            </div>
+
+            <div class="tolerance-control">
+              <span>Allowable Error (±%):</span>
+              <input type="text" class="sheet-input" data-field="allowableError" oninput="syncAllowable(this.value)" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Remarks -->
+        <div class="remarks-box">
+          <div class="remarks-label">Remarks:</div>
+          <textarea class="sheet-textarea remarks-area" data-field="remarks"></textarea>
+        </div>
+
+        <!-- Riepilogo Errore e Esito -->
+        <div class="summary-strip">
+          <div class="summary-errors-group">
+            <span>Instrument errors: Allowable ±</span>
+            <input type="text" class="sheet-input inline-num-edit" id="summaryAllowableInput" data-field="allowableError" oninput="syncAllowable(this.value)" />
+            <span>%, max. </span>
+            <input type="text" class="sheet-input inline-num-edit" id="summaryMaxErrorInput" data-field="maxErrorDisplay" oninput="onManualMaxErrorInput(this.value)" />
+            <span>%</span>
+            <button class="btn-mini no-export" style="margin-left:4px;" title="Ricalcola errore massimo dai punti" onclick="resetAutoMaxError()">↻</button>
+          </div>
+          <div>
+            <select class="sheet-select" style="width:auto; font-weight:800;" data-field="calibrationResult" onchange="updateResultStyle(this)">
+              <option value="Instrument passed calibration.">Instrument passed calibration.</option>
+              <option value="Instrument FAILED calibration.">Instrument FAILED calibration.</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Firme e Date -->
+        <table class="signoff-table">
+          <tr>
+            <td class="lbl">Calibration Date:</td>
+            <td class="val"><input class="sheet-input" data-field="calibrationDate" /></td>
+            <td class="lbl">Operator:</td>
+            <td class="val"><input class="sheet-input" data-field="operator" /></td>
+          </tr>
+          <tr>
+            <td class="lbl">Calibration Done By:</td>
+            <td class="val"><input class="sheet-input" data-field="calibrationDoneBy" /></td>
+            <td class="lbl">Approval Date:</td>
+            <td class="val"><input class="sheet-input" data-field="approvalDate" /></td>
+          </tr>
+          <tr>
+            <td class="lbl">Company / Plant:</td>
+            <td class="val"><input class="sheet-input" data-field="plantName" placeholder="es. Pastorizzatore P230" /></td>
+            <td class="lbl">Approval By:</td>
+            <td class="val"><input class="sheet-input" data-field="approvalBy" /></td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Footer Pagina 2 -->
+      <div class="doc-footer">
+        <span>Page: 2/2</span>
+        <span>End of Calibration Document</span>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'dbrtec_calibration_docs_v1';
+
+    function getDefaultTemplate(overrides = {}) {
+      return {
+        id: 'doc_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        issuerName: 'Di Blasio Riccardo',
+        issuerAddress: 'Via I Maggio 160',
+        issuerCity: '36060 Schiavon (VI)',
+        issuerVat: 'P.Iva 04781740966',
+        tagNo: '230-52-42',
+        customer: 'Latterie Vicentine Sca',
+        plantName: 'Pastorizzatore P230',
+        instrumentName: '230-52-42',
+        manufacturer: '',
+        type: 'PT100',
+        model: '',
+        serialNumber: '',
+        accrediaCert: '0156-ST-26',
+        expirationDate: '',
+        calibratorName: 'SCANDURA CALIBRATOR S/N 5562',
+        refSource: 'measure temperature with RTD\ntypePt-100 IEC (3 wire)',
+        rdgSource: 'temp. rdg. from keyboard',
+        auxSource: 'OUT1 aux power supply',
+        refUnit: 'degrees C',
+        rdgUnit: 'degrees C',
+        auxUnit: 'not defined',
+        refRangeMin: '0.0',
+        refRangeMax: '150.0',
+        rdgRangeMin: '0.00',
+        rdgRangeMax: '150.00',
+        auxRange: '',
+        allowableError: '0.66',
+        maxErrorDisplay: '-0.20',
+        maxErrorManual: false,
+        remarks: 'P230 SOSTA',
+        calibrationResult: 'Instrument passed calibration.',
+        calibrationDate: '10/11/26',
+        calibrationDoneBy: 'DR',
+        operator: 'DR',
+        approvalDate: '22/11/26',
+        approvalBy: '',
+        points: [
+          { ref: '50.0', rdg: '49.8', aux: '0', mode: 'As Found' },
+          { ref: '70.1', rdg: '69.9', aux: '0', mode: 'As Found' },
+          { ref: '90.1', rdg: '89.8', aux: '0', mode: 'As Found' }
+        ],
+        ...overrides
+      };
+    }
+
+    let state = {
+      activeId: null,
+      docs: []
+    };
+
+    function parseNum(val, fallback = 0) {
+      if (val === null || val === undefined || val === '') return fallback;
+      const n = parseFloat(String(val).replace(',', '.'));
+      return isNaN(n) ? fallback : n;
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.docs) && parsed.docs.length > 0) {
+            state = parsed;
+            return;
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+
+      const doc1 = getDefaultTemplate();
+      const doc2 = getDefaultTemplate({
+        tagNo: 'TEMP_7',
+        instrumentName: 'TEMP_7',
+        type: '',
+        serialNumber: '14296084',
+        remarks: 'TT LAB TEMP7',
+        calibrationDate: '11/11/26',
+        maxErrorDisplay: '-0.20',
+        points: [
+          { ref: '7.9', rdg: '7.7', aux: '0', mode: 'As Found' },
+          { ref: '50.0', rdg: '49.7', aux: '0', mode: 'As Found' },
+          { ref: '69.9', rdg: '69.6', aux: '0', mode: 'As Found' }
+        ]
+      });
+      state.docs = [doc1, doc2];
+      state.activeId = doc1.id;
+      saveAllToStorage(false);
+    }
+
+    function saveAllToStorage(notify = true) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderDocSelector();
+      if (notify) {
+        alert('Dati salvati correttamente nel browser.');
+      }
+    }
+
+    function getActiveDoc() {
+      return state.docs.find(d => d.id === state.activeId) || state.docs[0];
+    }
+
+    function renderDocSelector() {
+      const sel = document.getElementById('docSelector');
+      sel.innerHTML = '';
+      state.docs.forEach(doc => {
+        const opt = document.createElement('option');
+        opt.value = doc.id;
+        opt.textContent = `${doc.tagNo || 'Senza Tag'} — ${doc.customer || 'Cliente'}`;
+        if (doc.id === state.activeId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+
+    function switchDocument(id) {
+      state.activeId = id;
+      renderActiveDocument();
+      saveAllToStorage(false);
+    }
+
+    function createNewDocument() {
+      const current = getActiveDoc();
+      const newDoc = getDefaultTemplate({
+        issuerName: current.issuerName,
+        issuerAddress: current.issuerAddress,
+        issuerCity: current.issuerCity,
+        issuerVat: current.issuerVat,
+        customer: current.customer,
+        plantName: current.plantName,
+        calibratorName: current.calibratorName,
+        accrediaCert: current.accrediaCert,
+        tagNo: 'NUOVO-TAG',
+        instrumentName: 'NUOVO-TAG',
+        serialNumber: '',
+        remarks: '',
+        maxErrorManual: false,
+        points: [
+          { ref: '50.0', rdg: '50.0', aux: '0', mode: 'As Found' },
+          { ref: '70.0', rdg: '70.0', aux: '0', mode: 'As Found' },
+          { ref: '90.0', rdg: '90.0', aux: '0', mode: 'As Found' }
+        ]
+      });
+      state.docs.push(newDoc);
+      state.activeId = newDoc.id;
+      renderDocSelector();
+      renderActiveDocument();
+      saveAllToStorage(false);
+    }
+
+    function duplicateDocument() {
+      const current = getActiveDoc();
+      const copy = JSON.parse(JSON.stringify(current));
+      copy.id = 'doc_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+      copy.tagNo = current.tagNo + '_COPIA';
+      state.docs.push(copy);
+      state.activeId = copy.id;
+      renderDocSelector();
+      renderActiveDocument();
+      saveAllToStorage(false);
+    }
+
+    function deleteCurrentDocument() {
+      if (state.docs.length <= 1) {
+        alert('Deve rimanere almeno una scheda attiva.');
+        return;
+      }
+      if (!confirm('Eliminare questa scheda di taratura?')) return;
+      state.docs = state.docs.filter(d => d.id !== state.activeId);
+      state.activeId = state.docs[0].id;
+      renderDocSelector();
+      renderActiveDocument();
+      saveAllToStorage(false);
+    }
+
+    function syncTagInputs(val) {
+      const doc = getActiveDoc();
+      doc.tagNo = val;
+      document.querySelector('[data-field="tagNo"]').value = val;
+      document.getElementById('p2TagMirror').value = val;
+      renderDocSelector();
+    }
+
+    function syncAllowable(val) {
+      const doc = getActiveDoc();
+      doc.allowableError = val;
+      document.querySelectorAll('[data-field="allowableError"]').forEach(el => {
+        if (el.value !== val) el.value = val;
+      });
+      recalculateAll();
+    }
+
+    function onManualMaxErrorInput(val) {
+      const doc = getActiveDoc();
+      doc.maxErrorDisplay = val;
+      doc.maxErrorManual = true;
+    }
+
+    function resetAutoMaxError() {
+      const doc = getActiveDoc();
+      doc.maxErrorManual = false;
+      recalculateAll();
+    }
+
+    function renderActiveDocument() {
+      const doc = getActiveDoc();
+
+      document.querySelectorAll('[data-field]').forEach(el => {
+        const key = el.getAttribute('data-field');
+        el.value = doc[key] !== undefined ? doc[key] : '';
+      });
+
+      document.getElementById('p2TagMirror').value = doc.tagNo || '';
+      syncIssuerMirror(doc);
+      document.getElementById('lblRefUnit').textContent = doc.refUnit || '';
+      document.getElementById('lblRdgUnit').textContent = doc.rdgUnit || '';
+
+      const resSelect = document.querySelector('[data-field="calibrationResult"]');
+      updateResultStyle(resSelect);
+
+      renderTestPointsTable();
+      recalculateAll();
+    }
+
+    function syncIssuerMirror(doc) {
+      document.getElementById('p2IssuerName').textContent = doc.issuerName || '';
+      document.getElementById('p2IssuerAddress').textContent = doc.issuerAddress || '';
+      document.getElementById('p2IssuerCity').textContent = doc.issuerCity || '';
+      document.getElementById('p2IssuerVat').textContent = doc.issuerVat || '';
+    }
+
+    document.addEventListener('input', e => {
+      const field = e.target.getAttribute('data-field');
+      if (!field || field === 'allowableError' || field === 'maxErrorDisplay') return;
+      const doc = getActiveDoc();
+      doc[field] = e.target.value;
+
+      if (field.startsWith('issuer')) syncIssuerMirror(doc);
+      if (field === 'refUnit') document.getElementById('lblRefUnit').textContent = doc.refUnit;
+      if (field === 'rdgUnit') document.getElementById('lblRdgUnit').textContent = doc.rdgUnit;
+      if (field === 'customer') renderDocSelector();
+    });
+
+    function updateResultStyle(selectEl) {
+      if (selectEl.value.includes('passed')) {
+        selectEl.className = 'sheet-select status-pass';
+      } else {
+        selectEl.className = 'sheet-select status-fail';
+      }
+    }
+
+    function renderTestPointsTable() {
+      const doc = getActiveDoc();
+      const tbody = document.getElementById('testPointsBody');
+      tbody.innerHTML = '';
+
+      doc.points.forEach((pt, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${idx + 1}</strong></td>
+          <td><input type="text" class="sheet-input" style="text-align:center;" value="${pt.ref}" oninput="updatePoint(${idx}, 'ref', this.value)" /></td>
+          <td id="pt-ref-pct-${idx}">0.00</td>
+          <td><input type="text" class="sheet-input" style="text-align:center;" value="${pt.rdg}" oninput="updatePoint(${idx}, 'rdg', this.value)" /></td>
+          <td id="pt-rdg-pct-${idx}">0.00</td>
+          <td id="pt-err-pct-${idx}" style="font-weight:700;">0.00</td>
+          <td><input type="text" class="sheet-input" style="text-align:center;" value="${pt.aux}" oninput="updatePoint(${idx}, 'aux', this.value)" /></td>
+          <td>
+            <select class="sheet-select" style="text-align:center;" onchange="updatePoint(${idx}, 'mode', this.value)">
+              <option value="As Found" ${pt.mode === 'As Found' ? 'selected' : ''}>As Found</option>
+              <option value="As Left" ${pt.mode === 'As Left' ? 'selected' : ''}>As Left</option>
+            </select>
+          </td>
+          <td class="no-export">
+            <button class="btn-mini del" title="Elimina riga" onclick="removeTestPoint(${idx})">✕</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function updatePoint(idx, key, val) {
+      const doc = getActiveDoc();
+      doc.points[idx][key] = val;
+      if (key === 'ref' || key === 'rdg') {
+        doc.maxErrorManual = false;
+      }
+      recalculateAll();
+    }
+
+    function addTestPoint() {
+      const doc = getActiveDoc();
+      const last = doc.points[doc.points.length - 1] || { ref: '50.0', rdg: '50.0', aux: '0', mode: 'As Found' };
+      doc.points.push({
+        ref: (parseNum(last.ref, 50) + 10).toFixed(1),
+        rdg: (parseNum(last.rdg, 50) + 10).toFixed(1),
+        aux: '0',
+        mode: last.mode || 'As Found'
+      });
+      doc.maxErrorManual = false;
+      renderTestPointsTable();
+      recalculateAll();
+    }
+
+    function removeTestPoint(idx) {
+      const doc = getActiveDoc();
+      if (doc.points.length <= 1) return;
+      doc.points.splice(idx, 1);
+      doc.maxErrorManual = false;
+      renderTestPointsTable();
+      recalculateAll();
+    }
+
+    function recalculateAll() {
+      const doc = getActiveDoc();
+      const refMin = parseNum(doc.refRangeMin, 0);
+      const refMax = parseNum(doc.refRangeMax, 150);
+      const rdgMin = parseNum(doc.rdgRangeMin, 0);
+      const rdgMax = parseNum(doc.rdgRangeMax, 150);
+
+      const refSpan = (refMax - refMin) || 1;
+      const rdgSpan = (rdgMax - rdgMin) || 1;
+      const allowable = Math.abs(parseNum(doc.allowableError, 0.66)) || 0.66;
+
+      let maxAbsErr = 0;
+      let signedMaxErr = 0;
+      const computedPoints = [];
+
+      doc.points.forEach((pt, idx) => {
+        const refVal = parseFloat(String(pt.ref).replace(',', '.'));
+        const rdgVal = parseFloat(String(pt.rdg).replace(',', '.'));
+
+        if (!isNaN(refVal) && !isNaN(rdgVal)) {
+          const refPct = ((refVal - refMin) / refSpan) * 100;
+          const rdgPct = ((rdgVal - rdgMin) / rdgSpan) * 100;
+          const errPct = rdgPct - refPct;
+
+          const cellRefPct = document.getElementById(`pt-ref-pct-${idx}`);
+          const cellRdgPct = document.getElementById(`pt-rdg-pct-${idx}`);
+          const cellErrPct = document.getElementById(`pt-err-pct-${idx}`);
+
+          if (cellRefPct) cellRefPct.textContent = refPct.toFixed(2);
+          if (cellRdgPct) cellRdgPct.textContent = rdgPct.toFixed(2);
+          if (cellErrPct) {
+            cellErrPct.textContent = errPct.toFixed(2);
+            cellErrPct.style.color = Math.abs(errPct) > allowable ? '#b91c1c' : '#0f172a';
+          }
+
+          if (Math.abs(errPct) >= maxAbsErr) {
+            maxAbsErr = Math.abs(errPct);
+            signedMaxErr = errPct;
+          }
+
+          computedPoints.push({
+            refPct,
+            errPct,
+            mode: pt.mode || 'As Found'
+          });
+        }
+      });
+
+      if (!doc.maxErrorManual) {
+        doc.maxErrorDisplay = signedMaxErr.toFixed(2);
+        const maxErrInput = document.getElementById('summaryMaxErrorInput');
+        if (maxErrInput) maxErrInput.value = doc.maxErrorDisplay;
+      }
+
+      renderErrorSVG(computedPoints, allowable);
+    }
+
+    function renderErrorSVG(points, allowable) {
+      const container = document.getElementById('errorChartContainer');
+      const W = 640;
+      const H = 230;
+      const padL = 62;
+      const padR = 24;
+      const padT = 22;
+      const padB = 34;
+
+      const plotW = W - padL - padR;
+      const plotH = H - padT - padB;
+      const midY = padT + plotH / 2;
+
+      const mapX = pct => padL + (Math.max(0, Math.min(100, pct)) / 100) * plotW;
+      const mapY = err => {
+        const clamped = Math.max(-allowable * 1.25, Math.min(allowable * 1.25, err));
+        return midY - (clamped / allowable) * (plotH / 2);
+      };
+
+      const yTop = mapY(allowable);
+      const yBot = mapY(-allowable);
+
+      const asFoundPts = points.filter(p => p.mode === 'As Found').sort((a, b) => a.refPct - b.refPct);
+      const asLeftPts = points.filter(p => p.mode === 'As Left').sort((a, b) => a.refPct - b.refPct);
+
+      const buildPolyline = pts => pts.map(p => `${mapX(p.refPct).toFixed(1)},${mapY(p.errPct).toFixed(1)}`).join(' ');
+
+      let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
+
+      svg += `<line x1="${padL}" y1="${yTop}" x2="${W - padR}" y2="${yTop}" stroke="#0f172a" stroke-width="1.2" />`;
+      svg += `<line x1="${padL}" y1="${yBot}" x2="${W - padR}" y2="${yBot}" stroke="#0f172a" stroke-width="1.2" />`;
+      svg += `<line x1="${padL}" y1="${midY}" x2="${W - padR}" y2="${midY}" stroke="#0f172a" stroke-width="1.2" />`;
+      svg += `<line x1="${padL}" y1="${padT - 6}" x2="${padL}" y2="${H - padB + 6}" stroke="#0f172a" stroke-width="1.2" />`;
+
+      const fmtComma = n => n.toFixed(2).replace('.', ',');
+      svg += `<text x="${padL - 8}" y="${yTop + 4}" text-anchor="end" font-size="11" font-family="Arial">${fmtComma(allowable)}</text>`;
+      svg += `<text x="${padL - 8}" y="${yBot + 4}" text-anchor="end" font-size="11" font-family="Arial">-${fmtComma(allowable)}</text>`;
+      svg += `<text x="12" y="${midY + 4}" font-size="11" font-style="italic" font-family="Arial">error %</text>`;
+
+      [25, 50, 75, 100].forEach(tick => {
+        const tx = mapX(tick);
+        svg += `<line x1="${tx}" y1="${midY - 4}" x2="${tx}" y2="${midY + 4}" stroke="#0f172a" stroke-width="1.2" />`;
+        svg += `<text x="${tx}" y="${midY + 18}" text-anchor="middle" font-size="11" font-family="Arial">${tick}</text>`;
+      });
+      svg += `<text x="${W - padR}" y="${H - 6}" text-anchor="end" font-size="11" font-style="italic" font-family="Arial">reference range %</text>`;
+
+      if (asFoundPts.length > 0) {
+        if (asFoundPts.length > 1) {
+          svg += `<polyline fill="none" stroke="#0f172a" stroke-width="1.4" points="${buildPolyline(asFoundPts)}" />`;
+        }
+        asFoundPts.forEach(p => {
+          const cx = mapX(p.refPct);
+          const cy = mapY(p.errPct);
+          svg += `<polygon points="${cx - 4},${cy - 4} ${cx + 6},${cy} ${cx - 4},${cy + 4}" fill="#ffffff" stroke="#0f172a" stroke-width="1.4" />`;
+        });
+      }
+
+      if (asLeftPts.length > 0) {
+        if (asLeftPts.length > 1) {
+          svg += `<polyline fill="none" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="4,3" points="${buildPolyline(asLeftPts)}" />`;
+        }
+        asLeftPts.forEach(p => {
+          const cx = mapX(p.refPct);
+          const cy = mapY(p.errPct);
+          svg += `<circle cx="${cx}" cy="${cy}" r="4.2" fill="#2563eb" />`;
+        });
+      }
+
+      svg += `</svg>`;
+      container.innerHTML = svg;
+    }
+
+    function buildCleanCloneForExport(sourceElement) {
+      const wrapper = document.createElement('div');
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-10000px';
+      wrapper.style.top = '0';
+      wrapper.style.width = '794px';
+      wrapper.style.height = '1123px';
+      wrapper.style.background = '#ffffff';
+      wrapper.style.zIndex = '-1';
+
+      const clone = sourceElement.cloneNode(true);
+      clone.style.boxShadow = 'none';
+      clone.style.margin = '0';
+
+      clone.querySelectorAll('.no-export').forEach(el => el.remove());
+
+      const origControls = sourceElement.querySelectorAll('input, textarea, select');
+      const cloneControls = clone.querySelectorAll('input, textarea, select');
+
+      cloneControls.forEach((ctrl, i) => {
+        const orig = origControls[i];
+        let textVal = '';
+        if (orig.tagName === 'SELECT') {
+          textVal = orig.options[orig.selectedIndex]?.text || '';
+        } else {
+          textVal = orig.value || '';
+        }
+
+        const isInline =
+          ctrl.closest('.tag-box') ||
+          ctrl.closest('.range-inline') ||
+          ctrl.closest('.tolerance-control') ||
+          ctrl.closest('.summary-errors-group');
+
+        const replacement = document.createElement(isInline ? 'span' : 'div');
+        replacement.className = isInline ? 'pdf-static-inline' : 'pdf-static-text';
+        replacement.textContent = textVal;
+
+        replacement.style.textAlign = ctrl.style.textAlign || getComputedStyle(orig).textAlign;
+        replacement.style.fontWeight = ctrl.style.fontWeight || getComputedStyle(orig).fontWeight;
+        replacement.style.fontSize = getComputedStyle(orig).fontSize;
+        replacement.style.color = getComputedStyle(orig).color;
+        if (ctrl.classList.contains('inline-num-edit')) {
+          replacement.style.width = 'auto';
+        } else if (ctrl.style.width) {
+          replacement.style.width = ctrl.style.width;
+        }
+
+        ctrl.parentNode.replaceChild(replacement, ctrl);
+      });
+
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+      return { wrapper, clone };
+    }
+
+    async function exportTwoPagePDF() {
+      const btn = document.getElementById('btnExportPdf');
+      const oldText = btn.textContent;
+      btn.textContent = 'Generazione PDF...';
+      btn.disabled = true;
+
+      let exp1 = null;
+      let exp2 = null;
+
+      try {
+        const docData = getActiveDoc();
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({
+          orientation: 'p',
+          unit: 'mm',
+          format: 'a4',
+          compress: true
+        });
+
+        exp1 = buildCleanCloneForExport(document.getElementById('page1'));
+        const canvas1 = await html2canvas(exp1.clone, {
+          scale: 2,
+          width: 794,
+          height: 1123,
+          windowWidth: 1200,
+          useCORS: true,
+          backgroundColor: '#ffffff'
+        });
+        pdf.addImage(canvas1.toDataURL('image/jpeg', 0.88), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+
+        pdf.addPage();
+        exp2 = buildCleanCloneForExport(document.getElementById('page2'));
+        const canvas2 = await html2canvas(exp2.clone, {
+          scale: 2,
+          width: 794,
+          height: 1123,
+          windowWidth: 1200,
+          useCORS: true,
+          backgroundColor: '#ffffff'
+        });
+        pdf.addImage(canvas2.toDataURL('image/jpeg', 0.88), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+
+        const safeTag = (docData.tagNo || 'taratura').replace(/[^a-zA-Z0-9_-]/g, '_');
+        pdf.save(`Calibration_${safeTag}.pdf`);
+      } finally {
+        if (exp1) exp1.wrapper.remove();
+        if (exp2) exp2.wrapper.remove();
+        btn.textContent = oldText;
+        btn.disabled = false;
+      }
+    }
+
+    // Avvio
+    loadState();
+    renderDocSelector();
+    renderActiveDocument();
+  </script>
+</body>
+</html>
